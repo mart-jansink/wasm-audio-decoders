@@ -1,22 +1,22 @@
 import Worker from "web-worker";
 
-import EmscriptenWASM from "./EmscriptenWasm.js";
+import EmscriptenWasm from "./EmscriptenWasm.js";
 import OpusDecodedAudio from "./OpusDecodedAudio.js";
 import OggOpusDecoder from "./OggOpusDecoder.js";
 
 let sourceURL;
-
 export default class OggOpusDecoderWebWorker extends Worker {
   constructor() {
     if (!sourceURL) {
       const webworkerSourceCode =
         "'use strict';" +
-        // dependencies need to be manually resolved when stringifying this function
-        `(${((_OggOpusDecoder, _OpusDecodedAudio, _EmscriptenWASM) => {
-          // We're in a Web Worker
+        // dependencies need to be manually resolved when stringifying this
+        `(${((_OggOpusDecoder, _OpusDecodedAudio, _EmscriptenWasm) => {
+          // we're in a Web Worker: inject the classes to compile the Wasm per
+          // decoder instance
           const decoder = new _OggOpusDecoder(
             _OpusDecodedAudio,
-            _EmscriptenWASM
+            _EmscriptenWasm
           );
 
           self.onmessage = ({ data: { id, command, oggOpusData } }) => {
@@ -28,12 +28,14 @@ export default class OggOpusDecoderWebWorker extends Worker {
                   });
                 });
                 break;
+
               case "free":
                 decoder.free();
                 self.postMessage({
                   id,
                 });
                 break;
+
               case "reset":
                 decoder.reset().then(() => {
                   self.postMessage({
@@ -41,29 +43,29 @@ export default class OggOpusDecoderWebWorker extends Worker {
                   });
                 });
                 break;
-              case "decode":
-                const { channelData, samplesDecoded, sampleRate } =
-                  decoder.decode(new Uint8Array(oggOpusData));
 
-                self.postMessage(
-                  {
-                    id,
-                    channelData,
-                    samplesDecoded,
-                    sampleRate,
-                  },
-                  // The "transferList" parameter transfers ownership of channel data to main thread,
-                  // which avoids copying memory.
-                  channelData.map((channel) => channel.buffer)
+              case "decode":
+                const { channelData, samplesDecoded, sampleRate } = decoder.decode(
+                  new Uint8Array(oggOpusData)
                 );
+
+                // the "transferList" parameter transfers ownership of channel
+                // data to main thread, which avoids copying memory
+                self.postMessage( {
+                  id,
+                  channelData,
+                  samplesDecoded,
+                  sampleRate,
+                }, channelData.map((channel) => channel.buffer));
                 break;
+
               default:
                 this.console.error(
                   "Unknown command sent to worker: " + command
                 );
             }
           };
-        }).toString()})(${OggOpusDecoder}, ${OpusDecodedAudio}, ${EmscriptenWASM})`;
+        }).toString()})(${OggOpusDecoder}, ${OpusDecodedAudio}, ${EmscriptenWasm})`;
 
       const type = "text/javascript";
       try {
@@ -72,7 +74,7 @@ export default class OggOpusDecoderWebWorker extends Worker {
           new Blob([webworkerSourceCode], { type })
         );
       } catch {
-        // nodejs
+        // node.js
         sourceURL = `data:${type};base64,${Buffer.from(
           webworkerSourceCode
         ).toString("base64")}`;
@@ -117,9 +119,7 @@ export default class OggOpusDecoderWebWorker extends Worker {
   }
 
   async decode(data) {
-    return this._postToDecoder("decode", data).then(
-      ({ channelData, samplesDecoded }) =>
-        new OpusDecodedAudio(channelData, samplesDecoded)
-    );
+    const { channelData, samplesDecoded } = await this._postToDecoder("decode", data);
+    return new OpusDecodedAudio(channelData, samplesDecoded);
   }
 }

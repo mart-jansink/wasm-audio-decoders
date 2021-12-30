@@ -4,20 +4,18 @@
 
 typedef struct {
   /*
-     data should be large enough to maximum Ogg page size for instantiating OggOpusFile
-
-     See https://xiph.org/ogg/doc/oggstream.html
-     "...pages are a maximum of just under 64kB"
-
-     Tested with 512kbps Opus file whose first data page ended at 54880 bytes
-   */
+    WARNING: Data should be large enough to maximum Ogg page size for
+    instantiating OggOpusFile. See https://xiph.org/ogg/doc/oggstream.html:
+    "...pages are a maximum of just under 64kB". Tested with 512kbps Opus file
+    whose first data page ended at 54880 bytes.
+  */
   unsigned char _data[64*1024];
 
-  // *start is first position of _data, *cusor moves as reads occur
+  // *start is first position of _data, *cursor moves as reads occur
   unsigned char *start, *cursor;
 
-  // this tracks number undecoded bytes in buffer
-  // increases when bytes are enqueued, decreases when decoded
+  // this tracks the number of unread bytes in the buffer, increases when bytes
+  // are enqueued, decreases when they are decoded
   int num_unread;
 } ByteBuffer;
 
@@ -26,8 +24,9 @@ typedef struct {
   OggOpusFile *of;
   ByteBuffer buffer;
 
-  // 120ms buffer recommended per http://opus-codec.org/docs/opusfile_api-0.7/group__stream__decoding.html
-  float pcm[120*48*2]; // 120ms @ 48 khz * 2 channels
+  // 120ms buffer @ 48 kHz recommended per http://opus-codec.org/docs/opusfile_w
+  // asm-0.7/group__stream__decoding.html
+  float pcm[120*48*2];
 } OggOpusDecoder;
 
 OggOpusDecoder *ogg_opus_decoder_create();

@@ -12,12 +12,11 @@ static int cb_read(OggOpusDecoder *decoder, unsigned char *_ptr, int _nbytes) {
   // fprintf(stderr, "cb_read, _nbytes %i, queued %6i\n", _nbytes, decoder->buffer.num_unread);
 
   if (_nbytes) {
-    memcpy( _ptr, decoder->buffer.cursor, _nbytes);
+    memcpy(_ptr, decoder->buffer.cursor, _nbytes);
 
     decoder->buffer.cursor += _nbytes;
     decoder->buffer.num_unread -= _nbytes;
 
-    // debug
     // fwrite(_ptr, sizeof(*_ptr), _nbytes, outfile_rewrite);
   }
   // cb_read_total_bytes += _nbytes;
@@ -25,17 +24,16 @@ static int cb_read(OggOpusDecoder *decoder, unsigned char *_ptr, int _nbytes) {
 }
 
 /*
- * Feed opus audio data for decoding.  Calling program should enqueue and decode
+ * Feed opus audio data for decoding. Calling program should enqueue and decode
  * immediately after enqueuing to reduce decoding latency and reduce size of
  * undecoded decoder->buffer data. Per https://xiph.org/ogg/doc/oggstream.html,
- * decoding would be possible by 64k.  Otherwise, you're feeding invalid Opus
+ * decoding would be possible by 64k. Otherwise, you're feeding invalid Opus
  * data that is not recognized as a valid, decodeable Ogg Opus File
  *
  * The undecoded 64k buffer won't overflow and this method succeeds if:
- *
  *   1) You enqueue bytes in sizes that are divisors of 64 (64, 32, 16, etc)
  *   2) You enqueue valid Opus audio data that can be decoded
- *   3) You decode data after enqueuing it (thus removing it from undecoded buffer)
+ *   3) You decode data after enqueuing it (thus removing it from unread buffer)
  *
  * Returns 1 or 0 for success or error
  */
@@ -60,12 +58,10 @@ int ogg_opus_decoder_enqueue(OggOpusDecoder *decoder, unsigned char *data, size_
 
   decoder->buffer.cursor = decoder->buffer.start;
 
-  /*
-    initialize OggOpusFile if not yet initialized.  A few attempts are needed
-    until enough bytes are collected for it to discover first Ogg page
-  */
+  // initialize OggOpusFile if not yet initialized; a few attempts might be
+  // needed until enough bytes are collected for it to discover first Ogg page
   if (!decoder->of) {
-    memcpy( decoder->buffer.cursor + decoder->buffer.num_unread, data, size );
+    memcpy(decoder->buffer.cursor + decoder->buffer.num_unread, data, size);
     decoder->buffer.num_unread += size;
 
     int err;
@@ -81,13 +77,13 @@ int ogg_opus_decoder_enqueue(OggOpusDecoder *decoder, unsigned char *data, size_
     if (err == 0) {
       //fprintf(stderr, "OggOpusFile discovered with %d bytes\n", decoder->buffer.num_unread);
 
-      // OggOpusFile instantiated.  Reset unread buffer count
+      // OggOpusFile instantiated, reset unread buffer count
       decoder->buffer.num_unread = 0;
     }
   } else {
     // set buffer to new data
     decoder->buffer.num_unread += size;
-    memcpy( decoder->buffer.cursor, data, size );
+    memcpy(decoder->buffer.cursor, data, size);
   }
 
   return 1;
