@@ -89,14 +89,29 @@ int ogg_opus_decoder_enqueue(OggOpusDecoder *decoder, unsigned char *data, size_
   return 1;
 }
 
-int ogg_opus_decode_float_stereo_deinterleaved(OggOpusDecoder *decoder, float *left, float *right) {
+int ogg_opus_decode_float_deinterleaved(OggOpusDecoder *decoder, int channels, float *l, float *c, float *r, float *ls, float *rs, float *lr, float *rr, float *lfe) {
+  if (!decoder->of) return 0;
+
+  int samples_decoded = op_read_float(decoder->of, decoder->pcm, 120*48*channels, NULL);
+  float* output[8] = {l, c, r, ls, rs, lr, rr, lfe};
+
+  for (int i=0; i<samples_decoded; ++i) {
+    for (int c=0; c<channels; ++c) {
+      output[c][i] = decoder->pcm[i*channels+c];
+    }
+  }
+
+  return samples_decoded;
+}
+
+int ogg_opus_decode_float_stereo_deinterleaved(OggOpusDecoder *decoder, float *l, float *r) {
   if (!decoder->of) return 0;
 
   int samples_decoded = op_read_float_stereo(decoder->of, decoder->pcm, 120*48*2);
 
-  for (int i=samples_decoded-1; i>=0; i--) {
-    left[i] =  decoder->pcm[i*2];
-    right[i] = decoder->pcm[i*2+1];
+  for (int i=0; i<samples_decoded; ++i) {
+    l[i] = decoder->pcm[i*2+0];
+    r[i] = decoder->pcm[i*2+1];
   }
 
   return samples_decoded;

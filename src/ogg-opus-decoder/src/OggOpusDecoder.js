@@ -3,7 +3,8 @@ import EmscriptenWasm from "./EmscriptenWasm.js";
 
 let wasm;
 export default class OggOpusDecoder {
-  constructor(_OpusDecodedAudio, _EmscriptenWasm) {
+  constructor(channels = 2, _OpusDecodedAudio, _EmscriptenWasm) {
+    this._channels = channels;
     this._ready = this._init(_OpusDecodedAudio, _EmscriptenWasm);
   }
 
@@ -51,28 +52,21 @@ export default class OggOpusDecoder {
         this._wasm = wasm;
       }
     }
-
     await this._wasm.ready;
 
     this._decoder = this._wasm._ogg_opus_decoder_create();
 
     // input: data to send per iteration, 64 KB is the maximum for enqueuing in
     // libopusfile
-    [this._inputPtr, this._input] = this._allocateTypedArray(
-      (64 * 1024),
-      Uint8Array
-    );
+    [this._inputPtr, this._input] = this._allocateTypedArray((64 * 1024), Uint8Array);
 
     // output: 120ms buffer @ 48 kHz recommended per http://opus-codec.org/docs/
     // opusfile_wasm-0.7/group__stream__decoding.html
-    [this._leftPtr, this._leftArr] = this._allocateTypedArray(
-      (120 * 48),
-      Float32Array
-    );
-    [this._rightPtr, this._rightArr] = this._allocateTypedArray(
-      (120 * 48),
-      Float32Array
-    );
+    this._outputPtrs = [];
+    this._output = [];
+    for (let c = 0; c < this._channels; c++) {
+      [this._outputPtrs[c], this._output[c]] = this._allocateTypedArray((120 * 48), Float32Array);
+    }
   }
 
   get ready() {
@@ -88,8 +82,9 @@ export default class OggOpusDecoder {
     this._wasm._ogg_opus_decoder_free(this._decoder);
 
     this._wasm._free(this._inputPtr);
-    this._wasm._free(this._leftPtr);
-    this._wasm._free(this._rightPtr);
+    for (let c = 0; c < this._channels; c++) {
+      this._wasm._free(this._outputPtrs[c]);
+    }
   }
 
   /*
@@ -97,17 +92,22 @@ export default class OggOpusDecoder {
     packets of the next chain must be present when decoding. Errors will be
     returned by libopusfile if these initial Ogg packets are incomplete.
   */
-  decode(data) {
+  decode(data, downmix = (this._channels === 2)) {
     if (!(data instanceof Uint8Array))
       throw Error(
         `Data to decode must be Uint8Array. Instead got "${typeof data}".`
       );
 
-    let decodedLeft = [],
-      decodedRight = [],
-      samplesDecoded = 0,
-      offset = 0;
+    const decodingMethod = downmix ?
+      "_ogg_opus_decode_float_stereo_deinterleaved"
+    : "_ogg_opus_decode_float_deinterleaved";
 
+    const output = [];
+    for (let c = 0; c < this._channels; c++) {
+      output[c] = [];
+    }
+
+    let samplesDecoded = 0, offset = 0;
     while (offset < data.length) {
       const dataToSend = data.subarray(
         offset,
@@ -130,14 +130,15 @@ export default class OggOpusDecoder {
       // continue to decode until no more bytes are left to decode
       let iterationResult;
       while (
-        (iterationResult = this._wasm._ogg_opus_decode_float_stereo_deinterleaved(
+        (iterationResult = this._wasm[ decodingMethod ](
           this._decoder,
-          this._leftPtr, // left channel
-          this._rightPtr // right channel
+          this._channels,
+          ...this._outputPtrs,
         )) > 0
       ) {
-        decodedLeft.push(this._leftArr.slice(0, iterationResult));
-        decodedRight.push(this._rightArr.slice(0, iterationResult));
+        for (let c = 0; c < this._channels; c++) {
+          output[c].push(this._output[c].slice(0, iterationResult));
+        }
         samplesDecoded += iterationResult;
       }
 
@@ -168,10 +169,9 @@ export default class OggOpusDecoder {
     }
 
     return new this._OpusDecodedAudio(
-      [
-        OggOpusDecoder.concatFloat32(decodedLeft, samplesDecoded),
-        OggOpusDecoder.concatFloat32(decodedRight, samplesDecoded),
-      ],
+      output.map((channel) =>
+        OggOpusDecoder.concatFloat32(channel, samplesDecoded)
+      ),
       samplesDecoded
     );
   }

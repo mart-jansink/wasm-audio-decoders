@@ -25,8 +25,8 @@ typedef struct {
   ByteBuffer buffer;
 
   // 120ms buffer @ 48 kHz recommended per http://opus-codec.org/docs/opusfile_w
-  // asm-0.7/group__stream__decoding.html
-  float pcm[120*48*2];
+  // asm-0.7/group__stream__decoding.html, with space for at most 8 channels
+  float pcm[120*48*8];
 } OggOpusDecoder;
 
 OggOpusDecoder *ogg_opus_decoder_create();
@@ -35,4 +35,5 @@ void ogg_opus_decoder_free(OggOpusDecoder *);
 
 int ogg_opus_decoder_enqueue(OggOpusDecoder *, unsigned char *data, size_t data_size);
 
-int ogg_opus_decode_float_stereo_deinterleaved(OggOpusDecoder *decoder, float *left, float *right);
+int ogg_opus_decode_float_deinterleaved(OggOpusDecoder *decoder, int channels, float *l, float *c, float *r, float *ls, float *rs, float *lr, float *rr, float *lfe);
+int ogg_opus_decode_float_stereo_deinterleaved(OggOpusDecoder *decoder, float *l, float *r);

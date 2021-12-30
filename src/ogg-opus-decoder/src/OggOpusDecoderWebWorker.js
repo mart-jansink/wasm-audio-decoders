@@ -4,17 +4,18 @@ import EmscriptenWasm from "./EmscriptenWasm.js";
 import OpusDecodedAudio from "./OpusDecodedAudio.js";
 import OggOpusDecoder from "./OggOpusDecoder.js";
 
-let sourceURL;
+const sourceURLs = new Map();
 export default class OggOpusDecoderWebWorker extends Worker {
-  constructor() {
-    if (!sourceURL) {
+  constructor(channels = 2) {
+    if (!sourceURLs.has(channels)) {
       const webworkerSourceCode =
         "'use strict';" +
         // dependencies need to be manually resolved when stringifying this
-        `(${((_OggOpusDecoder, _OpusDecodedAudio, _EmscriptenWasm) => {
+        `(${((channels, _OggOpusDecoder, _OpusDecodedAudio, _EmscriptenWasm) => {
           // we're in a Web Worker: inject the classes to compile the Wasm per
           // decoder instance
           const decoder = new _OggOpusDecoder(
+            channels,
             _OpusDecodedAudio,
             _EmscriptenWasm
           );
@@ -65,23 +66,23 @@ export default class OggOpusDecoderWebWorker extends Worker {
                 );
             }
           };
-        }).toString()})(${OggOpusDecoder}, ${OpusDecodedAudio}, ${EmscriptenWasm})`;
+        }).toString()})(${channels}, ${OggOpusDecoder}, ${OpusDecodedAudio}, ${EmscriptenWasm})`;
 
       const type = "text/javascript";
       try {
         // browser
-        sourceURL = URL.createObjectURL(
+        sourceURLs.set(channels, URL.createObjectURL(
           new Blob([webworkerSourceCode], { type })
-        );
+        ));
       } catch {
         // node.js
-        sourceURL = `data:${type};base64,${Buffer.from(
+        sourceURLs.set(channels, `data:${type};base64,${Buffer.from(
           webworkerSourceCode
-        ).toString("base64")}`;
+        ).toString("base64")}`);
       }
     }
 
-    super(sourceURL);
+    super(sourceURLs.get(channels));
 
     this._id = Number.MIN_SAFE_INTEGER;
     this._enqueuedOperations = new Map();
