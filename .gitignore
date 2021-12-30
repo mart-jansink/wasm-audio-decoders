@@ -6,3 +6,7 @@ node_modules
 
 coverage
 test/actual/*
+
+src/*/src/EmscriptenWasm.js
+dist/
+demo/*.js
